@@ -1157,6 +1157,10 @@ impl Term for PosixTerminal {
             self.bell_style,
         )
     }
+
+    fn set_color_mode(&mut self, color_mode: ColorMode) {
+        self.color_mode = color_mode;
+    }
 }
 
 #[cfg(not(test))]

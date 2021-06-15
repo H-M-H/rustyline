@@ -223,6 +223,8 @@ pub trait Term {
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+
+    fn set_color_mode(&mut self, color_mode: ColorMode);
 }
 
 // If on Windows platform import Windows TTY module

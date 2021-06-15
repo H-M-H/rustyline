@@ -45,7 +45,8 @@ use log::debug;
 use radix_trie::Trie;
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, Renderer, Term, Terminal};
+use crate::tty::{RawMode, Terminal};
+pub use crate::tty::{Term, Renderer, RawReader};
 
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
@@ -67,9 +68,9 @@ use crate::validate::Validator;
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 /// Completes the line/word
-fn complete_line<H: Helper>(
-    rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+fn complete_line<R: Renderer, RR: RawReader, H: Helper>(
+    rdr: &mut RR,
+    s: &mut State<'_, '_, R, H>,
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -98,10 +99,10 @@ fn complete_line<H: Helper>(
                 let candidate = candidates[i].replacement();
                 // TODO we can't highlight the line buffer directly
                 /*let candidate = if let Some(highlighter) = s.highlighter {
-                    highlighter.highlight_candidate(candidate, CompletionType::Circular)
-                } else {
-                    Borrowed(candidate)
-                };*/
+                  highlighter.highlight_candidate(candidate, CompletionType::Circular)
+                  } else {
+                  Borrowed(candidate)
+                  };*/
                 completer.update(&mut s.line, start, candidate);
             } else {
                 // Restore current edited line
@@ -172,12 +173,12 @@ fn complete_line<H: Helper>(
             s.layout.end.row += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
-                && cmd != Cmd::SelfInsert(1, 'n')
-                && cmd != Cmd::SelfInsert(1, 'N')
-                && cmd != Cmd::Kill(Movement::BackwardChar(1))
-            {
-                cmd = s.next_cmd(input_state, rdr, false)?;
-            }
+                    && cmd != Cmd::SelfInsert(1, 'n')
+                    && cmd != Cmd::SelfInsert(1, 'N')
+                    && cmd != Cmd::Kill(Movement::BackwardChar(1))
+                    {
+                        cmd = s.next_cmd(input_state, rdr, false)?;
+                    }
             matches!(cmd, Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y'))
         } else {
             true
@@ -214,9 +215,9 @@ fn complete_line<H: Helper>(
                         index: i,
                         text: c.display().to_owned(),
                     })
-                    .for_each(|c| {
-                        let _ = tx_item.send(Arc::new(c));
-                    });
+                .for_each(|c| {
+                    let _ = tx_item.send(Arc::new(c));
+                });
                 drop(tx_item); // so that skim could know when to stop waiting for more items.
 
                 // setup skim and run with input options
@@ -252,7 +253,7 @@ fn complete_line<H: Helper>(
 }
 
 /// Completes the current hint
-fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
+fn complete_hint_line<R: Renderer, H: Helper>(s: &mut State<'_, '_, R, H>) -> Result<()> {
     let hint = match s.hint.as_ref() {
         Some(hint) => hint,
         None => return Ok(()),
@@ -269,9 +270,9 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     Ok(())
 }
 
-fn page_completions<C: Candidate, H: Helper>(
-    rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+fn page_completions<C: Candidate, R: Renderer, RR: RawReader, H: Helper>(
+    rdr: &mut RR,
+    s: &mut State<'_, '_, R, H>,
     input_state: &mut InputState,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
@@ -282,11 +283,11 @@ fn page_completions<C: Candidate, H: Helper>(
     let max_width = cmp::min(
         cols,
         candidates
-            .iter()
-            .map(|s| s.display().width())
-            .max()
-            .unwrap()
-            + min_col_pad,
+        .iter()
+        .map(|s| s.display().width())
+        .max()
+        .unwrap()
+        + min_col_pad,
     );
     let num_cols = cols / max_width;
 
@@ -299,18 +300,18 @@ fn page_completions<C: Candidate, H: Helper>(
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
-                && cmd != Cmd::SelfInsert(1, 'n')
-                && cmd != Cmd::SelfInsert(1, 'N')
-                && cmd != Cmd::SelfInsert(1, 'q')
-                && cmd != Cmd::SelfInsert(1, 'Q')
-                && cmd != Cmd::SelfInsert(1, ' ')
-                && cmd != Cmd::Kill(Movement::BackwardChar(1))
-                && cmd != Cmd::AcceptLine
-                && cmd != Cmd::Newline
-                && !matches!(cmd, Cmd::AcceptOrInsertLine { .. })
-            {
-                cmd = s.next_cmd(input_state, rdr, false)?;
-            }
+                    && cmd != Cmd::SelfInsert(1, 'n')
+                    && cmd != Cmd::SelfInsert(1, 'N')
+                    && cmd != Cmd::SelfInsert(1, 'q')
+                    && cmd != Cmd::SelfInsert(1, 'Q')
+                    && cmd != Cmd::SelfInsert(1, ' ')
+                    && cmd != Cmd::Kill(Movement::BackwardChar(1))
+                    && cmd != Cmd::AcceptLine
+                    && cmd != Cmd::Newline
+                    && !matches!(cmd, Cmd::AcceptOrInsertLine { .. })
+                    {
+                        cmd = s.next_cmd(input_state, rdr, false)?;
+                    }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
@@ -350,9 +351,9 @@ fn page_completions<C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<H: Helper>(
-    rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+fn reverse_incremental_search<R: Renderer, RR: RawReader, H: Helper>(
+    rdr: &mut RR,
+    s: &mut State<'_, '_, R, H>,
     input_state: &mut InputState,
     history: &History,
 ) -> Result<Option<Cmd>> {
@@ -438,11 +439,11 @@ fn reverse_incremental_search<H: Helper>(
 /// Handles reading and editing the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit<H: Helper>(
+fn readline_edit<T: Term, H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
-    original_mode: &tty::Mode,
+    editor: &mut GenericEditor<T, H>,
+    original_mode: &<T as Term>::Mode,
 ) -> Result<String> {
     let mut stdout = editor.term.create_writer();
 
@@ -513,7 +514,6 @@ fn readline_edit<H: Helper>(
         #[cfg(unix)]
         if cmd == Cmd::QuotedInsert {
             // Quoted insert
-            use crate::tty::RawReader;
             let c = rdr.next_char()?;
             s.edit_insert(c, 1)?;
             continue;
@@ -521,7 +521,6 @@ fn readline_edit<H: Helper>(
 
         #[cfg(windows)]
         if cmd == Cmd::PasteFromClipboard {
-            use crate::tty::RawReader;
             let clipboard = rdr.read_pasted_text()?;
             s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
         }
@@ -532,7 +531,8 @@ fn readline_edit<H: Helper>(
             cmd,
             Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
         ) {
-            editor.term.cursor = s.layout.cursor.col;
+            let term: &mut tty::Terminal = unsafe {std::mem::transmute(&mut editor.term)};
+            term.cursor = s.layout.cursor.col;
         }
 
         // Execute things can be done solely on a state object
@@ -552,10 +552,10 @@ fn readline_edit<H: Helper>(
     Ok(s.line.into_string())
 }
 
-struct Guard<'m>(&'m tty::Mode);
+struct Guard<'m, M: RawMode>(&'m M);
 
 #[allow(unused_must_use)]
-impl Drop for Guard<'_> {
+impl<M: RawMode> Drop for Guard<'_, M> {
     fn drop(&mut self) {
         let Guard(mode) = *self;
         mode.disable_raw_mode();
@@ -564,10 +564,10 @@ impl Drop for Guard<'_> {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw<H: Helper>(
+fn readline_raw<T: Term, H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
+    editor: &mut GenericEditor<T, H>,
 ) -> Result<String> {
     let original_mode = editor.term.enable_raw_mode()?;
     let guard = Guard(&original_mode);
@@ -716,8 +716,10 @@ impl<'h> Context<'h> {
 }
 
 /// Line editor
-pub struct Editor<H: Helper> {
-    term: Terminal,
+pub type Editor<H> = GenericEditor<Terminal, H>;
+
+pub struct GenericEditor<T: Term, H: Helper> {
+    term: T,
     history: History,
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
@@ -726,7 +728,7 @@ pub struct Editor<H: Helper> {
 }
 
 #[allow(clippy::new_without_default)]
-impl<H: Helper> Editor<H> {
+impl<T: Term, H: Helper> GenericEditor<T, H> {
     /// Create an editor with the default configuration
     pub fn new() -> Self {
         Self::with_config(Config::default())
@@ -734,7 +736,7 @@ impl<H: Helper> Editor<H> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Self {
-        let term = Terminal::new(
+        let term = T::new(
             config.color_mode(),
             config.output_stream(),
             config.tab_stop(),
@@ -902,7 +904,7 @@ impl<H: Helper> Editor<H> {
     }
 }
 
-impl<H: Helper> config::Configurer for Editor<H> {
+impl<T: Term, H: Helper> config::Configurer for GenericEditor<T, H> {
     fn config_mut(&mut self) -> &mut Config {
         &mut self.config
     }
@@ -924,11 +926,11 @@ impl<H: Helper> config::Configurer for Editor<H> {
 
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
-        self.term.color_mode = color_mode;
+        self.term.set_color_mode(color_mode);
     }
 }
 
-impl<H: Helper> fmt::Debug for Editor<H> {
+impl<T: Term + fmt::Debug, H: Helper> fmt::Debug for GenericEditor<T, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
@@ -937,12 +939,12 @@ impl<H: Helper> fmt::Debug for Editor<H> {
     }
 }
 
-struct Iter<'a, H: Helper> {
-    editor: &'a mut Editor<H>,
+struct Iter<'a, T: Term, H: Helper> {
+    editor: &'a mut GenericEditor<T, H>,
     prompt: &'a str,
 }
 
-impl<'a, H: Helper> Iterator for Iter<'a, H> {
+impl<'a, T: Term, H: Helper> Iterator for Iter<'a, T, H> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {

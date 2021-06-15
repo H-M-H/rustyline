@@ -10,9 +10,9 @@ use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::tty::Sink;
+use crate::tty::{Sink, Terminal};
 use crate::validate::Validator;
-use crate::{apply_backspace_direct, readline_direct, Context, Editor, Helper, Result};
+use crate::{apply_backspace_direct, readline_direct, Context, GenericEditor, Helper, Result};
 
 mod common;
 mod emacs;
@@ -20,9 +20,9 @@ mod history;
 mod vi_cmd;
 mod vi_insert;
 
-fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> Editor<()> {
+fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> GenericEditor<Terminal, ()> {
     let config = Config::builder().edit_mode(mode).build();
-    let mut editor = Editor::<()>::with_config(config);
+    let mut editor = GenericEditor::<Terminal, ()>::with_config(config);
     editor.term.keys.extend(keys.iter().cloned());
     editor
 }
@@ -136,13 +136,13 @@ fn unknown_esc_key() {
 #[test]
 fn test_send() {
     fn assert_send<T: Send>() {}
-    assert_send::<Editor<()>>();
+    assert_send::<GenericEditor<Terminal, ()>>();
 }
 
 #[test]
 fn test_sync() {
     fn assert_sync<T: Sync>() {}
-    assert_sync::<Editor<()>>();
+    assert_sync::<GenericEditor<Terminal, ()>>();
 }
 
 #[test]

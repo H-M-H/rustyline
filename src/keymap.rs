@@ -6,7 +6,7 @@ use radix_trie::Trie;
 
 use super::Result;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::tty::{RawReader, Term, Terminal};
+use crate::tty::RawReader;
 use crate::{Config, EditMode, Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
@@ -412,9 +412,9 @@ impl InputState {
     /// Parse user input into one command
     /// `single_esc_abort` is used in emacs mode on unix platform when a single
     /// esc key is expected to abort current action.
-    pub fn next_cmd(
+    pub fn next_cmd<RR: RawReader>(
         &mut self,
-        rdr: &mut <Terminal as Term>::Reader,
+        rdr: &mut RR,
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {

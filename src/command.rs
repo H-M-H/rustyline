@@ -10,15 +10,16 @@ use crate::keymap::{InputState, Refresher};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::{Helper, Result};
+use crate::tty::Renderer;
 
 pub enum Status {
     Proceed,
     Submit,
 }
 
-pub fn execute<H: Helper>(
+pub fn execute<R: Renderer, H: Helper>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, R, H>,
     input_state: &InputState,
     kill_ring: &Arc<Mutex<KillRing>>,
     config: &Config,

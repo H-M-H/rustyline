@@ -663,6 +663,10 @@ impl Term for Console {
             self.bell_style,
         )
     }
+
+    fn set_color_mode(&mut self, color_mode: ColorMode) {
+        self.color_mode = color_mode;
+    }
 }
 
 unsafe impl Send for Console {}

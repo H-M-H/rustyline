@@ -192,6 +192,10 @@ impl Term for DummyTerminal {
     fn create_writer(&self) -> Sink {
         Sink::new()
     }
+
+    fn set_color_mode(&mut self, color_mode: ColorMode) {
+        self.color_mode = color_mode;
+    }
 }
 
 #[cfg(unix)]

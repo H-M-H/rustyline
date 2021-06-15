@@ -15,14 +15,14 @@ use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
-use crate::tty::{Renderer, Term, Terminal};
+use crate::tty::{Renderer, RawReader};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 
 /// Represent the state during line editing.
 /// Implement rendering.
-pub struct State<'out, 'prompt, H: Helper> {
-    pub out: &'out mut <Terminal as Term>::Writer,
+pub struct State<'out, 'prompt, R: Renderer, H: Helper> {
+    pub out: &'out mut R,
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
@@ -42,13 +42,13 @@ enum Info<'m> {
     Msg(Option<&'m str>),
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'out, 'prompt, R: Renderer, H: Helper> State<'out, 'prompt, R, H> {
     pub fn new(
-        out: &'out mut <Terminal as Term>::Writer,
+        out: &'out mut R,
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
-    ) -> State<'out, 'prompt, H> {
+    ) -> State<'out, 'prompt, R, H> {
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
             out,
@@ -74,10 +74,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    pub fn next_cmd(
+    pub fn next_cmd<RR: RawReader>(
         &mut self,
         input_state: &mut InputState,
-        rdr: &mut <Terminal as Term>::Reader,
+        rdr: &mut RR,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
@@ -130,7 +130,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
-    pub fn move_cursor_at_leftmost(&mut self, rdr: &mut <Terminal as Term>::Reader) -> Result<()> {
+    pub fn move_cursor_at_leftmost(&mut self, rdr: &mut R::Reader) -> Result<()> {
         self.out.move_cursor_at_leftmost(rdr)
     }
 
@@ -230,13 +230,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl<'out, 'prompt, R: Renderer, H: Helper> Invoke for State<'out, 'prompt, R, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
+impl<'out, 'prompt, R: Renderer, H: Helper> Refresher for State<'out, 'prompt, R, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
@@ -291,7 +291,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
+impl<'out, 'prompt, R: Renderer, H: Helper> fmt::Debug for State<'out, 'prompt, R, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -304,7 +304,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'out, 'prompt, R: Renderer, H: Helper> State<'out, 'prompt, R, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -675,13 +675,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 }
 
 #[cfg(test)]
-pub fn init_state<'out, H: Helper>(
-    out: &'out mut <Terminal as Term>::Writer,
+pub fn init_state<'out, R: Renderer, H: Helper>(
+    out: &'out mut R,
     line: &str,
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::History,
-) -> State<'out, 'static, H> {
+) -> State<'out, 'static, R, H> {
     State {
         out,
         prompt: "",
